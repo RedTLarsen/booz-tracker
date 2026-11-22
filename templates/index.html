@@ -26,12 +26,22 @@
         {% endif %}
       {% endwith %}
 
-      <section class="summary-card" aria-labelledby="rolling-total-heading">
-        <div>
+      <section class="totals-grid" aria-label="Alcohol unit totals">
+        <article class="summary-card" aria-labelledby="rolling-total-heading">
           <p class="eyebrow">ROLLING WINDOW</p>
           <h2 id="rolling-total-heading">Last 24 hours</h2>
-        </div>
-        <p class="total"><span>{{ "%.2f"|format(total) }}</span> <small>units</small></p>
+          <p class="total"><span>{{ "%.2f"|format(total_24_hours) }}</span> <small>units</small></p>
+        </article>
+        <article class="summary-card" aria-labelledby="month-total-heading">
+          <p class="eyebrow">MONTH TO DATE</p>
+          <h2 id="month-total-heading">Current month</h2>
+          <p class="total"><span>{{ "%.2f"|format(total_month) }}</span> <small>units</small></p>
+        </article>
+        <article class="summary-card" aria-labelledby="year-total-heading">
+          <p class="eyebrow">YEAR TO DATE</p>
+          <h2 id="year-total-heading">Current year</h2>
+          <p class="total"><span>{{ "%.2f"|format(total_year) }}</span> <small>units</small></p>
+        </article>
       </section>
 
       <section class="panel add-panel" aria-labelledby="add-entry-heading">
