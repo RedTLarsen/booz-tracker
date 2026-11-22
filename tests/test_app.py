@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import patch
 
-from app import create_app
+from app import create_app, get_summary_totals
 
 
 class AlcoholTrackerTestCase(unittest.TestCase):
@@ -76,6 +76,36 @@ class AlcoholTrackerTestCase(unittest.TestCase):
         response = self.client.get("/")
         self.assertIn(b"<span>1.25</span>", response.data)
         self.assertIn(b"Last 24 hours", response.data)
+
+    def test_calendar_month_and_year_totals(self):
+        now = datetime(2026, 5, 15, 12, tzinfo=timezone.utc)
+        local_today = now.astimezone().date()
+        month_start = datetime.combine(
+            local_today.replace(day=1), datetime.min.time()
+        ).astimezone(timezone.utc)
+        year_start = datetime.combine(
+            local_today.replace(month=1, day=1), datetime.min.time()
+        ).astimezone(timezone.utc)
+        rows = [
+            (1.0, (now - timedelta(hours=1)).isoformat(timespec="seconds")),
+            (2.0, (month_start + timedelta(hours=1)).isoformat(timespec="seconds")),
+            (3.0, (year_start + timedelta(hours=1)).isoformat(timespec="seconds")),
+            (5.0, (year_start - timedelta(hours=1)).isoformat(timespec="seconds")),
+            (7.0, (now + timedelta(hours=1)).isoformat(timespec="seconds")),
+        ]
+
+        with self.app.app_context():
+            connection = sqlite3.connect(self.app.config["DATABASE"])
+            connection.row_factory = sqlite3.Row
+            connection.executemany(
+                "INSERT INTO entries (units, occurred_at) VALUES (?, ?)", rows
+            )
+            totals = get_summary_totals(connection, now)
+            connection.close()
+
+        self.assertEqual(totals["last_24_hours"], 1.0)
+        self.assertEqual(totals["current_month"], 3.0)
+        self.assertEqual(totals["current_year"], 6.0)
 
     def test_invalid_units_are_rejected(self):
         response = self.client.post(

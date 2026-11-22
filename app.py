@@ -33,13 +33,8 @@ def create_app(test_config=None):
     @app.get("/")
     def index():
         now = datetime.now(timezone.utc).replace(microsecond=0)
-        cutoff = now - timedelta(hours=24)
         db = get_db()
-        total = db.execute(
-            "SELECT COALESCE(SUM(units), 0) FROM entries "
-            "WHERE occurred_at >= ? AND occurred_at <= ?",
-            (cutoff.isoformat(timespec="seconds"), now.isoformat(timespec="seconds")),
-        ).fetchone()[0]
+        totals = get_summary_totals(db, now)
         entry_rows = db.execute(
             "SELECT id, alcohol_type, units, occurred_at FROM entries "
             "ORDER BY occurred_at DESC, id DESC"
@@ -61,7 +56,9 @@ def create_app(test_config=None):
         return render_template(
             "index.html",
             entries=entries,
-            total=total,
+            total_24_hours=totals["last_24_hours"],
+            total_month=totals["current_month"],
+            total_year=totals["current_year"],
             trend=trend,
             trend_max=trend_max,
         )
@@ -138,6 +135,45 @@ def init_db():
             "ALTER TABLE entries ADD COLUMN alcohol_type TEXT NOT NULL DEFAULT ''"
         )
     db.commit()
+
+
+def get_summary_totals(db, now):
+    local_today = now.astimezone().date()
+    month_start = datetime.combine(
+        local_today.replace(day=1), datetime.min.time()
+    ).astimezone(timezone.utc)
+    year_start = datetime.combine(
+        local_today.replace(month=1, day=1), datetime.min.time()
+    ).astimezone(timezone.utc)
+    now_text = now.isoformat(timespec="seconds")
+    row = db.execute(
+        """
+        SELECT
+            COALESCE(SUM(CASE
+                WHEN occurred_at >= ? AND occurred_at <= ? THEN units ELSE 0
+            END), 0) AS last_24_hours,
+            COALESCE(SUM(CASE
+                WHEN occurred_at >= ? AND occurred_at <= ? THEN units ELSE 0
+            END), 0) AS current_month,
+            COALESCE(SUM(CASE
+                WHEN occurred_at >= ? AND occurred_at <= ? THEN units ELSE 0
+            END), 0) AS current_year
+        FROM entries
+        """,
+        (
+            (now - timedelta(hours=24)).isoformat(timespec="seconds"),
+            now_text,
+            month_start.isoformat(timespec="seconds"),
+            now_text,
+            year_start.isoformat(timespec="seconds"),
+            now_text,
+        ),
+    ).fetchone()
+    return {
+        "last_24_hours": row["last_24_hours"],
+        "current_month": row["current_month"],
+        "current_year": row["current_year"],
+    }
 
 
 def parse_entry(form):
