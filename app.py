@@ -41,7 +41,8 @@ def create_app(test_config=None):
             (cutoff.isoformat(timespec="seconds"), now.isoformat(timespec="seconds")),
         ).fetchone()[0]
         entry_rows = db.execute(
-            "SELECT id, units, occurred_at FROM entries ORDER BY occurred_at DESC, id DESC"
+            "SELECT id, alcohol_type, units, occurred_at FROM entries "
+            "ORDER BY occurred_at DESC, id DESC"
         ).fetchall()
         entries = []
         for row in entry_rows:
@@ -49,6 +50,7 @@ def create_app(test_config=None):
             entries.append(
                 {
                     "id": row["id"],
+                    "alcohol_type": row["alcohol_type"],
                     "units": row["units"],
                     "occurred_at_display": local_time.strftime("%Y-%m-%d %H:%M"),
                     "occurred_at_input": local_time.strftime("%Y-%m-%dT%H:%M"),
@@ -68,12 +70,12 @@ def create_app(test_config=None):
     def add_entry():
         values = parse_entry(request.form)
         if values is None:
-            flash("Enter a positive number of units and a valid date and time.", "error")
+            flash("Enter an alcohol type, positive units, and a valid date and time.", "error")
             return redirect(url_for("index"))
         db = get_db()
         db.execute(
-            "INSERT INTO entries (units, occurred_at) VALUES (?, ?)",
-            (values[0], values[1].isoformat(timespec="seconds")),
+            "INSERT INTO entries (alcohol_type, units, occurred_at) VALUES (?, ?, ?)",
+            (values[0], values[1], values[2].isoformat(timespec="seconds")),
         )
         db.commit()
         flash("Entry added.", "success")
@@ -83,12 +85,12 @@ def create_app(test_config=None):
     def edit_entry(entry_id):
         values = parse_entry(request.form)
         if values is None:
-            flash("Enter a positive number of units and a valid date and time.", "error")
+            flash("Enter an alcohol type, positive units, and a valid date and time.", "error")
             return redirect(url_for("index"))
         db = get_db()
         result = db.execute(
-            "UPDATE entries SET units = ?, occurred_at = ? WHERE id = ?",
-            (values[0], values[1].isoformat(timespec="seconds"), entry_id),
+            "UPDATE entries SET alcohol_type = ?, units = ?, occurred_at = ? WHERE id = ?",
+            (values[0], values[1], values[2].isoformat(timespec="seconds"), entry_id),
         )
         if result.rowcount == 0:
             flash("That entry no longer exists.", "error")
@@ -124,16 +126,25 @@ def init_db():
         """
         CREATE TABLE IF NOT EXISTS entries (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
+            alcohol_type TEXT NOT NULL DEFAULT '',
             units REAL NOT NULL CHECK (units > 0),
             occurred_at TEXT NOT NULL
         )
         """
     )
+    columns = {row["name"] for row in db.execute("PRAGMA table_info(entries)")}
+    if "alcohol_type" not in columns:
+        db.execute(
+            "ALTER TABLE entries ADD COLUMN alcohol_type TEXT NOT NULL DEFAULT ''"
+        )
     db.commit()
 
 
 def parse_entry(form):
     try:
+        alcohol_type = form.get("alcohol_type", "").strip()
+        if not alcohol_type or len(alcohol_type) > 80:
+            return None
         units = float(form.get("units", ""))
         if not math.isfinite(units) or units <= 0:
             return None
@@ -144,7 +155,11 @@ def parse_entry(form):
                 occurred_at = occurred_at.astimezone()
         else:
             occurred_at = datetime.now(timezone.utc)
-        return units, occurred_at.astimezone(timezone.utc).replace(microsecond=0)
+        return (
+            alcohol_type,
+            units,
+            occurred_at.astimezone(timezone.utc).replace(microsecond=0),
+        )
     except (TypeError, ValueError, OverflowError):
         return None
 
