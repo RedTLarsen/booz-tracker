@@ -1,6 +1,6 @@
 # Alcohol Tracker
 
-A small Flask app for recording alcohol units, checking the total consumed in the last 24 hours, and viewing a 14-day daily trend. Entries are stored in a local SQLite database and can be edited or deleted.
+A small Flask app for recording alcohol types and units, checking the total consumed in the last 24 hours, and viewing a 14-day daily trend. Entries are stored in a local SQLite database and can be edited or deleted.
 
 ## Run locally
 

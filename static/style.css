@@ -70,7 +70,7 @@ h2 { margin-bottom: 0; font-size: 20px; letter-spacing: -.025em; }
 
 .entry-form, .edit-form {
   display: grid;
-  grid-template-columns: 1fr 1.4fr auto;
+  grid-template-columns: 1fr .7fr 1.4fr auto;
   align-items: end;
   gap: 12px;
 }
@@ -149,6 +149,7 @@ footer { padding: 8px 0; color: var(--muted); font-size: 12px; text-align: cente
   .page { padding-top: 28px; }
   .panel, .summary-card { padding: 19px; }
   .entry-form { grid-template-columns: 1fr 1fr; }
+  .entry-form label:nth-child(3) { grid-column: 1 / -1; }
   .entry-form button { grid-column: 1 / -1; }
   .chart { gap: 4px; }
   .chart-label { font-size: 10px; }

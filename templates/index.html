@@ -43,6 +43,10 @@
         </div>
         <form action="{{ url_for('add_entry') }}" method="post" class="entry-form">
           <label>
+            <span>Alcohol type</span>
+            <input name="alcohol_type" type="text" maxlength="80" placeholder="e.g. Beer or gin" required>
+          </label>
+          <label>
             <span>Units</span>
             <input name="units" type="number" min="0.01" step="0.01" placeholder="e.g. 2" required>
           </label>
@@ -89,12 +93,19 @@
             {% for entry in entries %}
               <article class="entry">
                 <div class="entry-summary">
-                  <div class="entry-units">{{ "%.2f"|format(entry.units) }} <span>units</span></div>
+                  <div class="entry-units">
+                    {{ entry.alcohol_type or "Type not recorded" }}
+                    <span>· {{ "%.2f"|format(entry.units) }} units</span>
+                  </div>
                   <time>{{ entry.occurred_at_display }}</time>
                 </div>
                 <details class="entry-actions">
                   <summary>Edit</summary>
                   <form action="{{ url_for('edit_entry', entry_id=entry.id) }}" method="post" class="edit-form">
+                    <label>
+                      <span>Alcohol type</span>
+                      <input name="alcohol_type" type="text" maxlength="80" value="{{ entry.alcohol_type }}" required>
+                    </label>
                     <label>
                       <span>Units</span>
                       <input name="units" type="number" min="0.01" step="0.01" value="{{ '%.2f'|format(entry.units) }}" required>

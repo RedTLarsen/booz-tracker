@@ -30,20 +30,27 @@ class AlcoholTrackerTestCase(unittest.TestCase):
         occurred_at = datetime.now().replace(microsecond=0).isoformat(timespec="minutes")
         response = self.client.post(
             "/entries",
-            data={"units": "2.5", "occurred_at": occurred_at},
+            data={
+                "alcohol_type": "Beer",
+                "units": "2.5",
+                "occurred_at": occurred_at,
+            },
             follow_redirects=True,
         )
 
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"2.50", response.data)
+        self.assertIn(b"Beer", response.data)
         self.assertIn(b"Entry added.", response.data)
         with self.app.app_context():
             connection = sqlite3.connect(self.app.config["DATABASE"])
             try:
-                row = connection.execute("SELECT units FROM entries").fetchone()
+                row = connection.execute(
+                    "SELECT alcohol_type, units FROM entries"
+                ).fetchone()
             finally:
                 connection.close()
-        self.assertEqual(row[0], 2.5)
+        self.assertEqual(row, ("Beer", 2.5))
 
         reopened_app = create_app(
             {"TESTING": True, "DATABASE": self.app.config["DATABASE"]}
@@ -73,16 +80,66 @@ class AlcoholTrackerTestCase(unittest.TestCase):
     def test_invalid_units_are_rejected(self):
         response = self.client.post(
             "/entries",
-            data={"units": "-1", "occurred_at": ""},
+            data={"alcohol_type": "Gin", "units": "-1", "occurred_at": ""},
             follow_redirects=True,
         )
 
-        self.assertIn(b"Enter a positive number", response.data)
+        self.assertIn(b"positive units", response.data)
         with self.app.app_context():
             count = sqlite3.connect(self.app.config["DATABASE"]).execute(
                 "SELECT COUNT(*) FROM entries"
             ).fetchone()[0]
         self.assertEqual(count, 0)
+
+    def test_missing_alcohol_type_is_rejected(self):
+        response = self.client.post(
+            "/entries",
+            data={"units": "1", "occurred_at": ""},
+            follow_redirects=True,
+        )
+
+        self.assertIn(b"Enter an alcohol type", response.data)
+        with self.app.app_context():
+            connection = sqlite3.connect(self.app.config["DATABASE"])
+            count = connection.execute("SELECT COUNT(*) FROM entries").fetchone()[0]
+            connection.close()
+        self.assertEqual(count, 0)
+
+    def test_existing_database_is_migrated_without_losing_entries(self):
+        database = Path(self.temp_dir.name) / "legacy.sqlite3"
+        occurred_at = (
+            datetime.now(timezone.utc)
+            .replace(microsecond=0)
+            .isoformat(timespec="seconds")
+        )
+        connection = sqlite3.connect(database)
+        connection.execute(
+            """
+            CREATE TABLE entries (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                units REAL NOT NULL CHECK (units > 0),
+                occurred_at TEXT NOT NULL
+            )
+            """
+        )
+        connection.execute(
+            "INSERT INTO entries (units, occurred_at) VALUES (?, ?)",
+            (2.0, occurred_at),
+        )
+        connection.commit()
+        connection.close()
+
+        app = create_app({"TESTING": True, "DATABASE": str(database)})
+        response = app.test_client().get("/")
+
+        self.assertIn(b"Type not recorded", response.data)
+        self.assertIn(b"2.00", response.data)
+        connection = sqlite3.connect(database)
+        row = connection.execute(
+            "SELECT alcohol_type, units FROM entries"
+        ).fetchone()
+        connection.close()
+        self.assertEqual(row, ("", 2.0))
 
     def test_entry_can_be_edited_and_deleted(self):
         with self.app.app_context():
@@ -103,12 +160,14 @@ class AlcoholTrackerTestCase(unittest.TestCase):
         updated = self.client.post(
             f"/entries/{entry_id}/edit",
             data={
+                "alcohol_type": "Gin",
                 "units": "4",
                 "occurred_at": datetime.now().replace(microsecond=0).isoformat(timespec="minutes"),
             },
             follow_redirects=True,
         )
         self.assertIn(b"4.00", updated.data)
+        self.assertIn(b"Gin", updated.data)
         deleted = self.client.post(
             f"/entries/{entry_id}/delete", follow_redirects=True
         )
